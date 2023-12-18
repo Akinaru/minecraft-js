@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { RNG } from './rng';
-import { blocks } from './blocks';
+import { blocks , resources } from './blocks';
 
 
 const geometry = new THREE.BoxGeometry();
@@ -60,22 +60,24 @@ export class World extends THREE.Group {
         }
     }
 
-    generateResources(rng){
+    generateResources(rng){        
         const simplex = new SimplexNoise(rng); 
-        for (let x = 0; x < this.size.width; x++){ 
-            for(let y = 0; y < this.size.height; y++){
-                for (let z = 0; z < this.size.width; z++){   
-                    const value = simplex.noise3d(
-                        x/blocks.stone.scale.x, 
-                        y/blocks.stone.scale.y, 
-                        z/blocks.stone.scale.z
-                        ); 
-                    if(value > blocks.stone.scarcity){
-                        this.setBlockId(x, y, z, blocks.stone.id)
+        resources.forEach(resource => {
+            for (let x = 0; x < this.size.width; x++){ 
+                for(let y = 0; y < this.size.height; y++){
+                    for (let z = 0; z < this.size.width; z++){   
+                        const value = simplex.noise3d(
+                            x/resource.scale.x, 
+                            y/resource.scale.y, 
+                            z/resource.scale.z
+                            ); 
+                        if(value > resource.scarcity){
+                            this.setBlockId(x, y, z, resource.id)
+                        }
                     }
                 }
             }
-        }
+        })
     }
     generateTerrain(rng){
         
@@ -116,25 +118,34 @@ export class World extends THREE.Group {
 
     // Generate the 3D representation of the world from the data
     generateMeshes(){
-
-
         this.clear();
         const maxCount = this.size.width * this.size.width * this.size.height;
-        const mesh = new THREE.InstancedMesh(geometry, material, maxCount);
-        mesh.count = 0;
+
+        const meshes = {}
+        Object.values(blocks)
+            .filter(blockType => blockType.id !== blocks.empty.id)
+            .forEach(blockType => {
+                const mesh = new THREE.InstancedMesh(geometry, blockType.material, maxCount)
+                mesh.name = blockType.name;
+                mesh.count = 0
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                meshes[blockType.id] = mesh;
+            })
 
         const matrix = new THREE.Matrix4();
         for (let x = 0; x < this.size.width; x++){
             for (let y = 0; y < this.size.height; y++){
                 for (let z = 0; z < this.size.width; z++){
                     const blockId = this.getBlock(x, y, z).id;
-                    const blocktype = Object.values(blocks).find(x => x.id === blockId);
+                    if (blockId === blocks.empty.id) continue;
+                    const mesh = meshes[blockId];
                     const instanceId = mesh.count;
+                    
 
-                    if(blockId != blocks.empty.id && !this.isBlockObscured(x, y, z)){
+                    if(!this.isBlockObscured(x, y, z)){
                         matrix.setPosition(x + 0.5, y + 0.5, z + 0.5);
                         mesh.setMatrixAt(instanceId, matrix);
-                        mesh.setColorAt(instanceId, new THREE.Color(blocktype.color))
                         this.setBlockInstanceId(x, y, z, instanceId);
                         mesh.count++;
                     }
@@ -143,7 +154,7 @@ export class World extends THREE.Group {
             }
         }
 
-        this.add(mesh);
+        this.add(...Object.values(meshes));
     }
 
     //get Block data at position
