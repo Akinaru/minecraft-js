@@ -3,9 +3,15 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 
 
 export class Player {
-    maxSpeed = 10
+    radius = 0.5;
+    height = 1.75;
+    jumpSpeed = 5;
+    onGround = false;
+
+    maxSpeed = 1
     input = new THREE.Vector3();
     velocity = new THREE.Vector3();
+    #worldVelocity = new THREE.Vector3();
 
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
     controls = new PointerLockControls(this.camera, document.body);
@@ -18,18 +24,46 @@ export class Player {
         this.camera.position.set(32, 16, 32);
         scene.add(this.camera);
         scene.add(this.cameraHelper);
+
         document.addEventListener('keydown', this.onKeyDown.bind(this));
         document.addEventListener('keyup', this.onKeyUp.bind(this));
+        // Wireframe mesh visualizing the player's bouding cylinder
+        this.boundsHelper = new THREE.Mesh(
+            new THREE.CylinderGeometry(this.radius, this.radius, this.height, 16),
+            new THREE.MeshBasicMaterial({wireframe: true})
+        )
+        scene.add(this.boundsHelper);
     }
+    get worldVelocity(){
+        this.#worldVelocity.copy(this.velocity);
+        this.#worldVelocity.applyEuler(new THREE.Euler(0, this.camera.rotation.y, 0));
+        return this.#worldVelocity;
+    }
+
+    /**
+     * 
+     * @param {THREE.Vector3} dv 
+     */
+    applyWorldDeltaVelocity(dv){
+        dv.applyEuler(new THREE.Euler(0, -this.camera.rotation.y, 0));
+        this.velocity.add(dv);
+    }
+
     applyInputs(dt){
         if (this.controls.isLocked){
             this.velocity.x = this.input.x
             this.velocity.z = this.input.z
             this.controls.moveRight(this.velocity.x * dt);
             this.controls.moveForward(this.velocity.z * dt);
+            this.position.y += this.velocity.y * dt;
 
             document.getElementById("player-position").innerHTML = this.toString();
         }
+    }
+
+    updateBoundsHelper(){
+        this.boundsHelper.position.copy(this.position);
+        this.boundsHelper.position.y -= this.height / 2;
     }
 
     /**
@@ -63,6 +97,10 @@ export class Player {
                 this.position.set(32,16,32);
                 this.velocity.set(0,0,0);
                 break;
+            case 'Space':
+                if(this.onGround){
+                    this.velocity.y += this.jumpSpeed;
+                }
         }
     }
     /**
